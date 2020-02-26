@@ -1,3 +1,20 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# This program is dedicated to the public domain under the CC0 license.
+
+"""
+Simple Bot to reply to Telegram messages.
+
+First, a few handler functions are defined. Then, those functions are passed to
+the Dispatcher and registered at their respective places.
+Then, the bot is started and runs until we press Ctrl-C on the command line.
+
+Usage:
+Basic Echobot example, repeats messages.
+Press Ctrl-C on the command line or send a signal to the process to stop the
+bot.
+"""
+
 import logging
 import os
 import json
@@ -10,6 +27,23 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 
 logger = logging.getLogger(__name__)
+
+
+# Define a few command handlers. These usually take the two arguments update and
+# context. Error handlers also receive the raised TelegramError object in error.
+def start(update, context):
+    """Send a message when the command /start is issued."""
+    update.message.reply_text('Hi!')
+
+
+def help(update, context):
+    """Send a message when the command /help is issued."""
+    update.message.reply_text('Help!')
+
+
+def echo(update, context):
+    """Echo the user message."""
+    update.message.reply_text(update.message.text)
 
 def get_num_from_string(string):
     num = ''  
@@ -27,7 +61,7 @@ def get_full_name(user):
         name = name + " " + user.last_name
     return name
 
-def get_score(uid):
+def get_score(chat_id, uid):
     current_dir = os.path.dirname(os.path.realpath(__file__))
     score = 0
     data = {}
@@ -35,21 +69,24 @@ def get_score(uid):
         try:
             data = json.load(json_file)
         except JSONDecodeError:
-            update_score(uid, 0, 0)
+            update_score(chat_id, uid, 0, 0)
 
         str_uid = str(uid)
+        str_chatid = str(chat_id)
         try:
-            score = data[str_uid]
+            chat_data = data[str_chatid]
+            score = chat_data[str_uid]
         except:
-            update_score(uid, 0, 0)
+            update_score(chat_id, uid, 0, 0)
         json_file.close()
     return str(score)
 
-def update_score(uid, current, changes):
+def update_score(chat_id, uid, current, changes):
     current_dir = os.path.dirname(os.path.realpath(__file__))
     new_score = current
 
     data = {}
+    chat_data = {}
     with open(current_dir + '/score.json', 'r') as json_file:
         try:
             data = json.load(json_file)
@@ -59,21 +96,32 @@ def update_score(uid, current, changes):
 
     with open(current_dir + '/score.json', 'w') as json_file:
         str_uid = str(uid)
-        data[str_uid] = int(current) + int(changes)
+        str_chat = str(chat_id)
+
+        try:
+            chat_data = data[str_chat]
+        except:
+            pass
+        
+        chat_data[str_uid] = int(current) + int(changes)
+        data[str_chat] = chat_data
         new_score = int(current) + int(changes)
+
         json.dump(data, json_file)
         json_file.close()
+
     return str(new_score)
 
 def change_score(update, context, index):
     changes = get_num_from_string(update.message.text[index+1:])
     orig_user = update.message.reply_to_message.from_user
+    chat_id = update.message.chat.id
 
     if orig_user.is_bot == False:
         orig_id = orig_user.id
 
         # 禁止自肥
-        if orig_id == update.message.from_user.id and changes > 0 update.message.text.find("-") < 0:
+        if orig_id == update.message.from_user.id and changes > 0 and update.message.text.find("-") < 0:
             update.message.reply_text("想給自己加分？你怎麼不吸自己的懶覺？")
             return
 
@@ -81,7 +129,7 @@ def change_score(update, context, index):
         if changes > 100 or changes < -100:
             update.message.reply_text("想灌水？你怎麼不先灌好你的腸子給我肛？")
             return
-        current_score = get_score(orig_id)
+        current_score = get_score(chat_id, orig_id)
         msg = " 被加到了："
         end = "，好棒棒！"
 
@@ -93,12 +141,11 @@ def change_score(update, context, index):
 
         # 檢查零分
         if changes == 0:
-            chat_id = update.message.chat.id
             bot.send_message(chat_id, "你在整我嗎？？？")
             msg = "維持在："
             end = "。加油，好嗎？"
 
-        new_score = update_score(orig_id, current_score, changes)
+        new_score = update_score(chat_id, orig_id, current_score, changes)
         name = get_full_name(orig_user)
         update.message.reply_text(name + msg + new_score + "分" + end)
     else:
@@ -106,20 +153,22 @@ def change_score(update, context, index):
 
 
 def show_score(update, context):
-    def show_score_for_user(user):
+    def show_score_for_user(chat_id, user):
         uid = user.id
-        score = get_score(uid)
+        score = get_score(chat_id, uid)
         name = user.first_name
         if user.last_name is not None:
             name = name + " " + user.last_name
         update.message.reply_text(name + " 目前的分數是: " + score + "分")
 
+    chat_id = update.message.chat.id
+
     if update.message.reply_to_message is not None:
         orig_user = update.message.reply_to_message.from_user
-        show_score_for_user(orig_user)
+        show_score_for_user(chat_id, orig_user)
     else:
         user = update.message.from_user
-        show_score_for_user(user)
+        show_score_for_user(chat_id, user)
 
 
 def show_all_scores(update, context):
@@ -129,18 +178,26 @@ def show_all_scores(update, context):
     # Parse data
     current_dir = os.path.dirname(os.path.realpath(__file__))
     data = {}
+    chat_data = {}
     with open(current_dir + '/score.json', 'r') as json_file:
         try:
             data = json.load(json_file)
         except:
             pass
-        if data == {}:
+
+        try:
+            chat_data = data[str(chat_id)]
+        except:
+            pass
+
+        if data == {} or chat_data == {}:
+            chat_id = update.message.chat.id
             bot.send_message(chat_id, "哎呀，還沒有紀錄任何分數呢...")
             return
         json_file.close()
 
     # Sort
-    arr = sorted(data.items(), key=lambda x: x[1], reverse=True)
+    arr = sorted(data[str(chat_id)].items(), key=lambda x: x[1], reverse=True)
     found = False
 
     # Prepare
@@ -168,7 +225,7 @@ def show_all_scores(update, context):
             else:
                 medal = ''
 
-            text += (medal + name + '：' + get_score(user.id) + '分\n')
+            text += (medal + name + '：' + get_score(chat_id, user.id) + '分\n')
             count += 1
 
     if found == False:
@@ -178,6 +235,7 @@ def show_all_scores(update, context):
 
 
 def handle_text(update, context):
+    chat_id = update.message.chat.id
     if update.message.text == '/score':
         show_score(update, context)
     elif update.message.text == '/list_score':
@@ -187,8 +245,8 @@ def handle_text(update, context):
         if update.message.text.find('http') < 0 and update.message.text.find('www') < 0:
             if update.message.text.find('+') >= 0 and update.message.text.find('-') >= 0:
                 bot.send_message("你他媽搞我？")
-                current_score = get_score(update.message.from_user.id)
-                new_score = update_score(update.message.from_user.id, current_score, -10)
+                current_score = get_score(chat_id, update.message.from_user.id)
+                new_score = update_score(chat_id, update.message.from_user.id, current_score, -10)
                 update.message.reply_text("扣你十分！！")
                 return
             if update.message.text.find('+') >= 0:
@@ -214,6 +272,8 @@ def main():
     # on different commands - answer in Telegram
     # dp.add_handler(CommandHandler("score", start))
 
+    # on noncommand i.e message - echo the message on Telegram
+    # dp.add_handler(MessageHandler(Filters.text, echo))
     dp.add_handler(MessageHandler(Filters.text, handle_text))
     global bot
     bot = updater.bot
