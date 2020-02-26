@@ -93,6 +93,7 @@ def change_score(update, context, index):
 
         # 檢查零分
         if changes == 0:
+            chat_id = update.message.chat.id
             bot.send_message(chat_id, "你在整我嗎？？？")
             msg = "維持在："
             end = "。加油，好嗎？"
