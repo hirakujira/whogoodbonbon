@@ -73,7 +73,7 @@ def change_score(update, context, index):
         orig_id = orig_user.id
 
         # 禁止自肥
-        if orig_id == update.message.from_user.id and changes > 0:
+        if orig_id == update.message.from_user.id and changes > 0 update.message.text.find("-") >= 0:
             update.message.reply_text("想給自己加分？你怎麼不吸自己的懶覺？")
             return
 
