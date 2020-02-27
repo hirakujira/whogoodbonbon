@@ -13,7 +13,26 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
                     level=logging.INFO)
 
 logger = logging.getLogger(__name__)
+current_dir = os.path.dirname(os.path.realpath(__file__))
 
+def load_config():
+    token = ''
+    config_path = current_dir + '/config.json'
+    assert os.path.isfile(config_path)
+
+    with open(config_path, 'r') as config:
+        try:
+            data = json.load(json_file)
+        except JSONDecodeError:
+            assert False
+
+        try:
+            token = data['token']
+        except:
+            assert False
+
+        config.close()
+    return token
 
 # Define a few command handlers. These usually take the two arguments update and
 # context. Error handlers also receive the raised TelegramError object in error.
@@ -48,7 +67,6 @@ def get_full_name(user):
     return name
 
 def get_score(chat_id, uid):
-    current_dir = os.path.dirname(os.path.realpath(__file__))
     score = 0
     data = {}
     with open(current_dir + '/score.json', 'r') as json_file:
@@ -68,7 +86,6 @@ def get_score(chat_id, uid):
     return str(score)
 
 def update_score(chat_id, uid, current, changes):
-    current_dir = os.path.dirname(os.path.realpath(__file__))
     new_score = current
 
     data = {}
@@ -251,7 +268,8 @@ def main():
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
     # Post version 12 this will no longer be necessary
-    updater = Updater("TOKEN", use_context=True)
+    token = load_config()
+    updater = Updater(token, use_context=True)
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
 
